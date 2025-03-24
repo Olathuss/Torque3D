@@ -282,6 +282,9 @@ Camera::Camera()
    mLastAbsolutePitch = 0.0f;
    mLastAbsoluteRoll = 0.0f;
 
+   mMinPitchAngle = -MaxPitch;
+   mMaxPitchAngle = MaxPitch;
+
    // For NewtonFlyMode
    mNewtonRotation = false;
    mAngularVelocity.set(0.0f, 0.0f, 0.0f);
@@ -440,14 +443,14 @@ void Camera::setCameraFov(F32 fov)
 
 //----------------------------------------------------------------------------
 
-void clampPitchAngle(F32 &pitch)
+void Camera::clampPitchAngle(F32 &pitch)
 {
    // Clamp pitch to +/-MaxPitch, but allow pitch=PI as it is used by some editor
    // views (bottom, front, right)
-   if ((pitch > MaxPitch) && !mIsEqual(pitch, M_PI_F, 0.001f))
-      pitch = MaxPitch;
-   else if (pitch < -MaxPitch)
-      pitch = -MaxPitch;
+   if ((pitch > mMaxPitchAngle) && !mIsEqual(pitch, M_PI_F, 0.001f))
+      pitch = mMaxPitchAngle;
+   else if (pitch < mMinPitchAngle)
+      pitch = mMinPitchAngle;
 }
 
 //----------------------------------------------------------------------------

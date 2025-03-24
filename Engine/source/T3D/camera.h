@@ -120,6 +120,9 @@ class Camera: public ShapeBase
       F32 mLastAbsolutePitch;          ///< Stores that last absolute pitch value as passed in by ExtendedMove
       F32 mLastAbsoluteRoll;           ///< Stores that last absolute roll value as passed in by ExtendedMove
 
+      F32 mMinPitchAngle;
+      F32 mMaxPitchAngle;
+
       /// @name NewtonFlyMode
       /// @{
 
@@ -192,6 +195,8 @@ class Camera: public ShapeBase
 
       GameBase* getOrbitObject()      { return(mOrbitObject); }
       bool isObservingClientObject()   { return(mObservingClientObject); }
+
+      void clampPitchAngle(F32& pitch);
 
       /// @name NewtonFlyMode
       /// @{
