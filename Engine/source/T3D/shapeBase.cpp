@@ -172,6 +172,8 @@ ShapeBaseData::ShapeBaseData()
    density( 1.0f ),
    maxEnergy( 0.0f ),
    maxDamage( 1.0f ),
+   mCollisionMul(0.0f),
+   mImpactMul(0.0f),
    repairRate( 0.0033f ),
    disabledLevel( 1.0f ),
    destroyedLevel( 1.0f ),
@@ -229,6 +231,8 @@ ShapeBaseData::ShapeBaseData(const ShapeBaseData& other, bool temp_clone) : Game
    density = other.density;
    maxEnergy = other.maxEnergy;
    maxDamage = other.maxDamage;
+   mCollisionMul = other.mCollisionMul;
+   mImpactMul = other.mImpactMul;
    repairRate = other.repairRate;
    disabledLevel = other.disabledLevel;
    destroyedLevel = other.destroyedLevel;
@@ -345,7 +349,7 @@ bool ShapeBaseData::preload(bool server, String &errorStr)
 
    S32 i;
    U32 assetStatus = ShapeAsset::getAssetErrCode(mShapeAsset);
-   if (assetStatus == AssetBase::Ok|| assetStatus == AssetBase::UsingFallback)
+   if (assetStatus == AssetBase::Ok || assetStatus == AssetBase::UsingFallback)
    {
       if (!server && !mShape->preloadMaterialList(mShape.getPath()) && NetConnection::filesWereDownloaded())
          shapeError = true;
@@ -585,6 +589,10 @@ void ShapeBaseData::initPersistFields()
       addField( "isInvincible", TypeBool, Offset(isInvincible, ShapeBaseData),
          "Invincible flag; when invincible, the object cannot be damaged or "
          "repaired." );
+      addFieldV("collisionMul", TypeRangedF32, Offset(mCollisionMul, ShapeBaseData), &CommonValidators::PositiveFloat,
+         "collision damage multiplier");
+      addFieldV("impactMul", TypeRangedF32, Offset(mImpactMul, ShapeBaseData), &CommonValidators::PositiveFloat,
+         "impact damage multiplier");
    endGroup( "Damage/Energy" );
 
    addGroup( "Camera", "The settings used by the shape when it is the camera." );
@@ -904,7 +912,17 @@ void ShapeBaseData::unpackData(BitStream* stream)
    silent_bbox_check = stream->readFlag();
 }
 
+//
+//
+void ShapeBaseData::onShapeChanged()
+{
+   reloadOnLocalClient();
+}
 
+void ShapeBaseData::onDebrisChanged()
+{
+   reloadOnLocalClient();
+}
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 
