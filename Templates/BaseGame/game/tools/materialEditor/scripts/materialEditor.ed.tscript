@@ -747,8 +747,8 @@ function MaterialEditorGui::setActiveMaterial( %this, %material )
    
    // we create or recreate a material to hold in a pristine state
    // or, this crashes the ap. fix properly - BJR
-//   if(isObject(notDirtyMaterial))
-//      notDirtyMaterial.delete();
+   //if(isObject(notDirtyMaterial))
+   //   notDirtyMaterial.delete();
       
    singleton Material(notDirtyMaterial)
    {
@@ -860,16 +860,28 @@ function MaterialEditorGui::convertTextureFields(%this)
    }
    
 function MaterialEditorGui::convertMaterialTextureField(%this, %material, %mapName)
-   {
+{
    for(%index = 0; %index < 4; %index++)
    {
       %mapFile = %material.call("get" @ %mapName, %index);
-      if(%mapFile !$= "" && !isFile(%mapFile))
-   {
-         //see if we can't go finding it 
-         %mapFile = MaterialEditorGui.searchForTexture(MaterialEditorGui.currentMaterial, %mapFile);      
-         MaterialEditorGui.currentMaterial.call("set" @ %mapName, %mapFile, %index);
-   }
+      if(%mapFile !$= "")
+      {
+         if(isFile(%mapFile))
+         {
+            //see if we can't go finding it 
+            %mapFile = MaterialEditorGui.searchForTexture(MaterialEditorGui.currentMaterial, %mapFile);      
+            MaterialEditorGui.currentMaterial.call("set" @ %mapName, %mapFile, %index);
+         }
+         else
+         {
+            %firstChar = getSubStr( %mapFile, 0, 1 );
+            if(%firstChar $= "#" || %firstChar $= "$" ) // we are a named target
+            {
+               %assetPtr = %material.call("get" @ %mapName @ "Asset", %index);
+               MaterialEditorGui.currentMaterial.call("set" @ %mapName, %assetPtr, %index);
+            }
+         }
+      }
    }
 }
 
@@ -1198,7 +1210,6 @@ function MaterialEditorGui::guiSync( %this, %material )
    MaterialEditorPropertiesWindow-->glowMulTextEdit.setText((%material).glowMul[%layer]);
    MaterialEditorPropertiesWindow-->glowMulSlider.setValue((%material).glowMul[%layer]);
    MaterialEditorPropertiesWindow-->glowCheckbox.setValue((%material).glow[%layer]);
-   MaterialEditorPropertiesWindow-->emissiveCheckbox.setValue((%material).emissive[%layer]);
    MaterialEditorPropertiesWindow-->receiveShadowsCheckbox.setValue((%material).receiveShadows[%layer]);
    MaterialEditorPropertiesWindow-->ignoreLightingCheckbox.setValue((%material).ignoreLighting[%layer]);   
    MaterialEditorPropertiesWindow-->parallaxTextEdit.setText((%material).parallaxScale[%layer]);

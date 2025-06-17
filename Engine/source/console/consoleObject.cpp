@@ -286,6 +286,12 @@ void AbstractClassRep::shutdown()
 
    // Release storage allocated to the class table.
 
+   for (auto walk = classLinkList; walk; walk = walk->nextClass)
+   {
+      walk->mFieldList.clear();
+      walk->mFieldList.compact(); // Important: frees the internal buffer
+   }
+
    for (U32 group = 0; group < NetClassGroupsCount; group++)
       for(U32 type = 0; type < NetClassTypesCount; type++)
          if( classTable[ group ][ type ] )
@@ -361,10 +367,10 @@ void ConsoleObject::addGroup(const char* in_pGroupname, const char* in_pGroupDoc
    // Create Field.
    AbstractClassRep::Field f;
    f.pFieldname   = StringTable->insert(pFieldNameBuf);
-   f.pGroupname   = in_pGroupname;
+   f.pGroupname   = StringTable->insert(in_pGroupname);
 
    if(in_pGroupDocs)
-      f.pFieldDocs   = in_pGroupDocs;
+      f.pFieldDocs   = StringTable->insert(in_pGroupDocs);
 
    f.type         = AbstractClassRep::StartGroupFieldType;
    f.elementCount = 0;
@@ -390,7 +396,7 @@ void ConsoleObject::endGroup(const char*  in_pGroupname)
    // Create Field.
    AbstractClassRep::Field f;
    f.pFieldname   = StringTable->insert(pFieldNameBuf);
-   f.pGroupname   = in_pGroupname;
+   f.pGroupname   = StringTable->insert(in_pGroupname);
    f.type         = AbstractClassRep::EndGroupFieldType;
    f.groupExpand  = false;
    f.validator    = NULL;
@@ -412,7 +418,7 @@ void ConsoleObject::addArray( const char *arrayName, S32 count )
    // Create Field.
    AbstractClassRep::Field f;
    f.pFieldname   = StringTable->insert(nameBuff);
-   f.pGroupname   = arrayName;
+   f.pGroupname   = StringTable->insert(arrayName);
 
    f.type         = AbstractClassRep::StartArrayFieldType;
    f.elementCount = count;
@@ -435,7 +441,7 @@ void ConsoleObject::endArray( const char *arrayName )
    // Create Field.
    AbstractClassRep::Field f;
    f.pFieldname   = StringTable->insert(nameBuff);
-   f.pGroupname   = arrayName;
+   f.pGroupname   = StringTable->insert(arrayName);
    f.type         = AbstractClassRep::EndArrayFieldType;
    f.groupExpand  = false;
    f.validator    = NULL;
@@ -511,7 +517,7 @@ void ConsoleObject::addField(const char*  in_pFieldname,
    AssertFatal(conType, avar("ConsoleObject::addProtectedField[%s] - invalid console type", in_pFieldname));
 
    if (in_pFieldDocs)
-      f.pFieldDocs = in_pFieldDocs;
+      f.pFieldDocs = StringTable->insert(in_pFieldDocs);
 
    f.type = in_fieldType;
    f.offset = in_fieldOffset;
@@ -606,7 +612,7 @@ void ConsoleObject::addProtectedField(const char*  in_pFieldname,
    AssertFatal(conType, avar("ConsoleObject::addProtectedField[%s] - invalid console type", in_pFieldname));
 
    if (in_pFieldDocs)
-      f.pFieldDocs = in_pFieldDocs;
+      f.pFieldDocs = StringTable->insert(in_pFieldDocs);
 
    f.type = in_fieldType;
    f.offset = in_fieldOffset;
@@ -640,7 +646,7 @@ void ConsoleObject::addProtectedFieldV(const char* in_pFieldname,
    AssertFatal(conType, avar("ConsoleObject::addProtectedField[%s] - invalid console type", in_pFieldname));
 
    if (in_pFieldDocs)
-      f.pFieldDocs = in_pFieldDocs;
+      f.pFieldDocs = StringTable->insert(in_pFieldDocs);
 
    f.type = in_fieldType;
    f.offset = in_fieldOffset;
@@ -712,7 +718,7 @@ void ConsoleObject::addFieldV(const char* in_pFieldname,
    ConsoleBaseType* conType = ConsoleBaseType::getType(in_fieldType);
    AssertFatal(conType, avar("ConsoleObject::addProtectedField[%s] - invalid console type", in_pFieldname));
    if (in_pFieldDocs)
-      f.pFieldDocs = in_pFieldDocs;
+      f.pFieldDocs = StringTable->insert(in_pFieldDocs);
    f.type = in_fieldType;
    f.offset = in_fieldOffset;
    f.table = NULL;

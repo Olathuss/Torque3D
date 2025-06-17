@@ -2744,6 +2744,20 @@ DefineEngineFunction( debug, void, (),,
 
 //-----------------------------------------------------------------------------
 
+DefineEngineFunction(isPlayerBuild, bool, (), ,
+   "Test whether the engine has been compiled with TORQUE_PLAYER.\n\n"
+   "@return True if this is a playback only build; false otherwise.\n\n"
+   "@ingroup Platform")
+{
+#ifdef TORQUE_PLAYER
+   return true;
+#else
+   return false;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+
 DefineEngineFunction( isShippingBuild, bool, (),,
    "Test whether the engine has been compiled with TORQUE_SHIPPING, i.e. in a form meant for final release.\n\n"
    "@return True if this is a shipping build; false otherwise.\n\n"
@@ -2845,7 +2859,7 @@ const char* getDocsLink(const char* filename, U32 lineNumber)
    String baseUrL = String(Con::getVariable("Pref::DocURL","https://github.com/TorqueGameEngines/Torque3D/blob/development/Engine/source"));
    String URL = String("<a:") + baseUrL + fileLineString + String(">docs</a>");
 
-   return (new String(URL))->c_str();
+   return StringTable->insert(URL.c_str());
 }
 
 bool getDocsURL(void* obj, const char* array, const char* data)

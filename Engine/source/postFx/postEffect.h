@@ -90,9 +90,9 @@ public:
 
 protected:
 
-   DECLARE_IMAGEASSET_ARRAY(PostEffect, Texture, NumTextures, onTextureChanged);
-   DECLARE_IMAGEASSET_ARRAY_SETGET(PostEffect, Texture);
-   void onTextureChanged() {}
+   DECLARE_IMAGEASSET_ARRAY(PostEffect, Texture, GFXStaticTextureSRGBProfile, NumTextures);
+   GFXTextureProfile* mTextureProfile[NumTextures];
+   GFXTexHandle mTexture[NumTextures];
 
    bool mTexSRGB[NumTextures];
 
@@ -215,6 +215,7 @@ protected:
    /// Parent and sibling PostEffects in the chain are still processed.
    /// This is intended for debugging purposes.
    bool mSkip;
+   bool mPreProcessed;
 
    bool mOneFrameOnly;
    bool mOnThisFrame;  
