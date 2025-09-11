@@ -151,13 +151,14 @@ TSStatic::TSStatic()
    mAnimOffset = 0.0f;
    mAnimSpeed = 1.0f;
 
-   INIT_ASSET(Shape);
+   mShapeAsset.registerRefreshNotify(this);
 }
 
 TSStatic::~TSStatic()
 {
    delete mConvexList;
    mConvexList = NULL;
+   mShapeAsset.unregisterRefreshNotify();
 }
 
 ImplementEnumType(TSMeshType,
@@ -180,11 +181,7 @@ void TSStatic::initPersistFields()
    docsURL;
    addGroup("Shape");
 
-   INITPERSISTFIELD_SHAPEASSET(Shape, TSStatic, "Model to use for this TSStatic");
-
-   addProtectedField("shapeName", TypeShapeFilename, Offset(mShapeName, TSStatic),
-      &TSStatic::_setShapeData, &defaultProtectedGetFn,
-      "%Path and filename of the model file (.DTS, .DAE) to use for this TSStatic. Legacy field. Any loose files assigned here will attempt to be auto-imported in as an asset.", AbstractClassRep::FIELD_HideInInspectors);
+   INITPERSISTFIELD_SHAPEASSET_REFACTOR(Shape, TSStatic, "Model to use for this TSStatic");
 
    endGroup("Shape");
 
@@ -393,59 +390,54 @@ bool TSStatic::_createShape()
    mAmbientThread = NULL;
    //mShape = NULL;
 
-   U32 assetStatus = ShapeAsset::getAssetErrCode(mShapeAsset);
-   if (assetStatus == AssetBase::Ok || assetStatus == AssetBase::UsingFallback)
+   if (getShape())
    {
-      //Special-case handling, usually because we set noShape
-      mShape = mShapeAsset->getShapeResource();
-   }
+      if (isClientObject() &&
+         !getShape()->preloadMaterialList(getShapeFile()) &&
+         NetConnection::filesWereDownloaded())
+         return false;
 
-   if (!mShape)
+      mObjBox = getShape()->mBounds;
+      resetWorldBox();
+
+      mShapeInstance = new TSShapeInstance(getShape(), true);
+      mShapeInstance->resetMaterialList();
+      mShapeInstance->cloneMaterialList();
+
+      if (isGhost())
+      {
+         // Reapply the current skin
+         mAppliedSkinName = "";
+         reSkin();
+
+         updateMaterials();
+      }
+
+      prepCollision();
+
+      // Find the "ambient" animation if it exists
+      S32 ambientSeq = getShape()->findSequence("ambient");
+
+      if (ambientSeq > -1 && !mAmbientThread)
+         mAmbientThread = mShapeInstance->addThread();
+
+      if ( mAmbientThread )
+         mShapeInstance->setSequence(mAmbientThread, ambientSeq, mAnimOffset);
+
+      // Resolve CubeReflectorDesc.
+      if (cubeDescName.isNotEmpty())
+      {
+         Sim::findObject(cubeDescName, reflectorDesc);
+      }
+      else if (cubeDescId > 0)
+      {
+         Sim::findObject(cubeDescId, reflectorDesc);
+      }
+   }
+   else
    {
       Con::errorf("TSStatic::_createShape() - Shape Asset %s had no valid shape!", mShapeAsset.getAssetId());
       return false;
-   }
-
-   if (isClientObject() &&
-      !mShape->preloadMaterialList(mShape.getPath()) &&
-      NetConnection::filesWereDownloaded())
-      return false;
-
-   mObjBox = mShape->mBounds;
-   resetWorldBox();
-
-   mShapeInstance = new TSShapeInstance(mShape, isClientObject());
-   mShapeInstance->resetMaterialList();
-   mShapeInstance->cloneMaterialList();
-
-   if (isGhost())
-   {
-      // Reapply the current skin
-      mAppliedSkinName = "";
-      reSkin();
-
-      updateMaterials();
-   }
-
-   prepCollision();
-
-   // Find the "ambient" animation if it exists
-   S32 ambientSeq = mShape->findSequence("ambient");
-
-   if (ambientSeq > -1 && !mAmbientThread)
-      mAmbientThread = mShapeInstance->addThread();
-
-   if ( mAmbientThread )
-      mShapeInstance->setSequence(mAmbientThread, ambientSeq, mAnimOffset);
-
-   // Resolve CubeReflectorDesc.
-   if (cubeDescName.isNotEmpty())
-   {
-      Sim::findObject(cubeDescName, reflectorDesc);
-   }
-   else if (cubeDescId > 0)
-   {
-      Sim::findObject(cubeDescId, reflectorDesc);
    }
 
    //Set up the material slot vars for easy manipulation
@@ -533,20 +525,20 @@ void TSStatic::prepCollision()
 
    if (mCollisionType == CollisionMesh || mCollisionType == VisibleMesh)
    {
-      mShape->findColDetails(mCollisionType == VisibleMesh, &mCollisionDetails, &mLOSDetails, mCollisionLOD);
+      getShape()->findColDetails(mCollisionType == VisibleMesh, &mCollisionDetails, &mLOSDetails, mCollisionLOD);
       if (mDecalType == mCollisionType)
       {
          mDecalDetailsPtr = &mCollisionDetails;
       }
       else if (mDecalType == CollisionMesh || mDecalType == VisibleMesh)
       {
-         mShape->findColDetails(mDecalType == VisibleMesh, &mDecalDetails, 0, mCollisionLOD);
+         getShape()->findColDetails(mDecalType == VisibleMesh, &mDecalDetails, 0, mCollisionLOD);
          mDecalDetailsPtr = &mDecalDetails;
       }
    }
    else if (mDecalType == CollisionMesh || mDecalType == VisibleMesh)
    {
-      mShape->findColDetails(mDecalType == VisibleMesh, &mDecalDetails, 0, mCollisionLOD);
+      getShape()->findColDetails(mDecalType == VisibleMesh, &mDecalDetails, 0, mCollisionLOD);
       mDecalDetailsPtr = &mDecalDetails;
    }
 
@@ -564,12 +556,12 @@ void TSStatic::_updatePhysics()
    if (mCollisionType == Bounds)
    {
       MatrixF offset(true);
-      offset.setPosition(mShape->center);
+      offset.setPosition(getShape()->center);
       colShape = PHYSICSMGR->createCollision();
       colShape->addBox(getObjBox().getExtents() * 0.5f * mObjScale, offset);
    }
    else
-      colShape = mShape->buildColShape(mCollisionType == VisibleMesh, getScale());
+      colShape = getShape()->buildColShape(mCollisionType == VisibleMesh, getScale());
 
    if (colShape)
    {
@@ -719,7 +711,7 @@ void TSStatic::_updateShouldTick()
 
 void TSStatic::prepRenderImage(SceneRenderState* state)
 {
-   if (!mShapeInstance)
+   if (!mShapeAsset.isValid() || !mShapeInstance)
       return;
 
    Point3F cameraOffset;
@@ -958,7 +950,7 @@ U32 TSStatic::packUpdate(NetConnection* con, U32 mask, BitStream* stream)
 
    if (stream->writeFlag(mask & AdvancedStaticOptionsMask))
    {
-      PACK_ASSET(con, Shape);
+      PACK_ASSET_REFACTOR(con, Shape);
 
       stream->write((U32)mDecalType);
 
@@ -970,13 +962,14 @@ U32 TSStatic::packUpdate(NetConnection* con, U32 mask, BitStream* stream)
 
       stream->write(mForceDetail);
 
-   if (stream->writeFlag(mAnimOffset != 0.0f))
-      stream->writeFloat(mAnimOffset, 7);
+      if (stream->writeFlag(mPlayAmbient && hasAnim()))
+      {
+         if (stream->writeFlag(mAnimOffset != 0.0f))
+            stream->writeFloat(mAnimOffset, 7);
 
-   if (stream->writeFlag(mAnimSpeed != 1.0f))
-      stream->writeSignedFloat(mAnimSpeed / AnimSpeedMax, 7);
-
-      stream->writeFlag(mPlayAmbient);
+            if (stream->writeFlag(mAnimSpeed != 1.0f))
+               stream->writeSignedFloat(mAnimSpeed / AnimSpeedMax, 7);
+      }
    }
 
    if (stream->writeFlag(mUseAlphaFade))
@@ -1074,7 +1067,7 @@ void TSStatic::unpackUpdate(NetConnection* con, BitStream* stream)
 
    if (stream->readFlag()) // AdvancedStaticOptionsMask
    {
-      UNPACK_ASSET(con, Shape);
+      UNPACK_ASSET_REFACTOR(con, Shape);
 
       stream->read((U32*)&mDecalType);
 
@@ -1086,13 +1079,15 @@ void TSStatic::unpackUpdate(NetConnection* con, BitStream* stream)
 
       stream->read(&mForceDetail);
 
-      if (stream->readFlag())
-         mAnimOffset = stream->readFloat(7);
-
-      if (stream->readFlag())
-         mAnimSpeed = stream->readSignedFloat(7) * AnimSpeedMax;
-
       mPlayAmbient = stream->readFlag();
+      if (mPlayAmbient)
+      {
+         if (stream->readFlag())
+            mAnimOffset = stream->readFloat(7);
+
+         if (stream->readFlag())
+            mAnimSpeed = stream->readSignedFloat(7) * AnimSpeedMax;
+      }
 
       //update our shape, figuring that it likely changed
       _createShape();
@@ -1331,27 +1326,25 @@ bool TSStatic::buildExportPolyList(ColladaUtils::ExportData* exportData, const B
    }
 
    //Next, process the LOD levels and materials.
-   if (isServerObject() && getClientObject())
+   if (isServerObject())
    {
-      TSStatic* clientShape = dynamic_cast<TSStatic*>(getClientObject());
-
       exportData->meshData.increment();
 
       //Prep a meshData for this shape in particular
       ColladaUtils::ExportData::meshLODData* meshData = &exportData->meshData.last();
 
       //Fill out the info we'll need later to actually append our mesh data for the detail levels during the processing phase
-      meshData->shapeInst = clientShape->mShapeInstance;
+      meshData->shapeInst = mShapeInstance;
       meshData->originatingObject = this;
       meshData->meshTransform = mObjToWorld;
       meshData->scale = mObjScale;
 
       //Iterate over all our detail levels
-      for (U32 i = 0; i < clientShape->mShapeInstance->getNumDetails(); i++)
+      for (U32 i = 0; i < mShapeInstance->getNumDetails(); i++)
       {
-         TSShape::Detail detail = clientShape->mShapeInstance->getShape()->details[i];
+         TSShape::Detail detail = mShapeInstance->getShape()->details[i];
 
-         String detailName = String::ToLower(clientShape->mShapeInstance->getShape()->getName(detail.nameIndex));
+         String detailName = String::ToLower(mShapeInstance->getShape()->getName(detail.nameIndex));
 
          //Skip it if it's a collision or line of sight element
          if (detailName.startsWith("col") || detailName.startsWith("los"))
@@ -1594,9 +1587,9 @@ void TSStatic::updateMaterials()
 
    String path;
    if (mShapeAsset->isAssetValid())
-      path = mShapeAsset->getShapeFileName();
+      path = mShapeAsset->getShapeFile();
    else
-      path = mShapeName;
+      path = mShapeFile;
 
    pMatList->setTextureLookupPath(path);
 
@@ -1778,7 +1771,7 @@ DefineEngineMethod(TSStatic, changeMaterial, void, (const char* mapTo, Material*
       return;
    }
 
-   TSMaterialList* shapeMaterialList = object->getShapeResource()->materialList;
+   TSMaterialList* shapeMaterialList = object->getShape()->materialList;
 
    // Check the mapTo name exists for this shape
    S32 matIndex = shapeMaterialList->getMaterialNameList().find_next(String(mapTo));
@@ -1818,7 +1811,7 @@ DefineEngineMethod(TSStatic, getModelFile, const char*, (), ,
    "@endtsexample\n"
 )
 {
-   return object->getShape();
+   return object->getShapeFile();
 }
 
 void TSStatic::set_special_typing()
@@ -1863,14 +1856,14 @@ void TSStatic::setSelectionFlags(U8 flags)
 bool TSStatic::hasNode(const char* nodeName)
 {
 
-   S32 nodeIDx = getShapeResource()->findNode(nodeName);
+   S32 nodeIDx = getShape()->findNode(nodeName);
    return nodeIDx >= 0;
 }
 
 void TSStatic::getNodeTransform(const char *nodeName, const MatrixF &xfm, MatrixF *outMat)
 {
 
-    S32 nodeIDx = getShapeResource()->findNode(nodeName);
+    S32 nodeIDx = getShape()->findNode(nodeName);
 
     MatrixF nodeTransform(xfm);
     const Point3F& scale = getScale();

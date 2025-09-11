@@ -72,7 +72,7 @@ function AssetBrowser::callAssetTypeFunc(%this, %type, %function, %param0, %para
    {
       %group = ABAssetTypesList.getKey(%i);
       %typeData = ABAssetTypesList.getValue(%i);
-      
+
       if(getField(%typeData, 0) $= %type)
       {
          %typeGroup = %group;
@@ -80,7 +80,7 @@ function AssetBrowser::callAssetTypeFunc(%this, %type, %function, %param0, %para
          break;
       }
    }
-
+   
    %paramOffset = 0;
    %isStaticCall = false;
    %command = "";
@@ -246,6 +246,26 @@ function AssetBrowser::callAssetTypeFunc(%this, %type, %function, %param0, %para
    return %return;
 }
 
+function AssetBrowser::getAssetTypeGroup(%typeName)
+{
+   %typeGroup = "";
+   %typeData = "";
+   for(%i=0; %i < ABAssetTypesList.count(); %i++)
+   {
+      %group = ABAssetTypesList.getKey(%i);
+      %typeData = ABAssetTypesList.getValue(%i);
+
+      if(getField(%typeData, 0) $= %typeName)
+      {
+         %typeGroup = %group;
+         %typeData = %typeData;
+         break;
+      }
+   }
+   
+   return %typeGroup;
+}
+
 //
 function AssetBrowser::initialize(%this)
 {
@@ -258,7 +278,7 @@ function AssetBrowser::initialize(%this)
       
    if(!isObject(%this.dirHandler))
    {
-      %this.dirHandler = makedirectoryHandler(%this-->filterTree, "cache,shaderCache", ""); 
+      %this.dirHandler = makedirectoryHandler(%this-->filterTree, "cache,shaderCache,previewCache", ""); 
       %this.dirHandler.currentAddress = "data/";
    }
       
@@ -758,9 +778,12 @@ function AssetBrowser::buildAssetPreview( %this, %asset, %moduleName )
       AssetPreviewArray.add( %previewButton );
 }
 
-function AssetBrowser::refresh(%this)
+function AssetBrowser::refresh(%this, %regenPreviews)
 {
-   if(!%this.dirty)
+   if(%regenPreviews $= "")
+      %regenPreviews = true;
+      
+   if(!%this.dirty && %regenPreviews)
    {
       %this.dirty = true;
       
@@ -819,7 +842,7 @@ function AssetPreviewButton::onDoubleClick(%this)
 function assetBrowserPreviewSlider::onMouseDragged(%this)
 {
    EditorSettings.setValue("Assets/Browser/previewTileSize", %this.getValue());
-   AssetBrowser.refresh();  
+   AssetBrowser.refresh(false);  
 }
 
 function AssetBrowser::loadDirectories( %this )
@@ -1613,7 +1636,7 @@ function AssetBrowser::doRebuildAssetArray(%this)
             else
             {
                //got it.	
-               if(%folderName $= "shaderCache" || %folderName $= "cache" || %folderName $= ".git")
+               if(%folderName $= "shaderCache" || %folderName $= "cache" || %folderName $= ".git" || %folderName $= "previewCache")
                   continue;
                   
                if(!%this.coreModulesFilter && %folderName $= "core" && %breadcrumbPath $= "")
@@ -2120,6 +2143,9 @@ function AssetBrowser::navigateTo(%this, %address, %historyNav)
    if(startsWith(%address, "/"))
       %address = strreplace(%address, "/", "");
       
+   // Safety
+   %address = strreplace(%address, "//", "/");
+      
    //Don't bother navigating if it's to the place we already are
    if(%this.dirHandler.currentAddress !$= %address)
    {
@@ -2394,7 +2420,7 @@ function AssetBrowserPreviewButton::onMouseDragged(%this)
    Canvas.repaint();
 }
 
-function AssetBrowserPreviewButton::onControlDragCancelled(%this)
+function AssetPreviewControlType_AssetDrop::onControlDragCancelled(%this)
 {
    Canvas.popDialog(EditorDragAndDropLayer);
 }
@@ -2829,8 +2855,15 @@ function AssetBrowserWindow::releasePanel(%this)
 function AssetBrowserWindow::onResize(%this, %posX, %posY, %width, %height)
 {
     if (%width>%height)
+    {
         AssetBrowser-->assetList.fillRowFirst = true;
+        AssetBrowser-->assetList.extent.x = AssetListPanel.extent.x;
+    }
     else
+    {
         AssetBrowser-->assetList.fillRowFirst = false;
-    AssetBrowser.rebuildAssetArray();
+        AssetBrowser-->assetList.extent.y = AssetListPanel.extent.y;
+    }
+        
+    //AssetBrowser.rebuildAssetArray();
 }

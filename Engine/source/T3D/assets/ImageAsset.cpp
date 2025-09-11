@@ -213,6 +213,8 @@ bool ImageAsset::onAdd()
 
 void ImageAsset::onRemove()
 {
+   Torque::FS::RemoveChangeNotification(mImageFile, this, &ImageAsset::_onResourceChanged);
+
    // Call Parent.
    Parent::onRemove();
 }
@@ -345,6 +347,11 @@ void ImageAsset::initializeAsset(void)
       return;
 
    mImageFile = expandAssetFilePath(mImageFile);
+
+   if (getOwned())
+      Torque::FS::AddChangeNotification(mImageFile, this, &ImageAsset::_onResourceChanged);
+
+   populateImage();
 }
 
 void ImageAsset::onAssetRefresh(void)
@@ -355,6 +362,8 @@ void ImageAsset::onAssetRefresh(void)
 
    // Call parent.
    Parent::onAssetRefresh();
+
+   populateImage();
 
 }
 
@@ -385,6 +394,8 @@ void ImageAsset::setImageFile(StringTableEntry pImageFile)
    if (pImageFile == mImageFile)
       return;
 
+   Torque::FS::RemoveChangeNotification(mImageFile, this, &ImageAsset::_onResourceChanged);
+
    if (String(pImageFile).startsWith("#") || String(pImageFile).startsWith("$"))
    {
       mImageFile = StringTable->insert(pImageFile);
@@ -394,46 +405,6 @@ void ImageAsset::setImageFile(StringTableEntry pImageFile)
    }
 
    mImageFile = getOwned() ? expandAssetFilePath(pImageFile) : StringTable->insert(pImageFile);
-
-   if (Torque::FS::IsFile(mImageFile))
-   {
-      if (dStrEndsWith(mImageFile, ".dds"))
-      {
-         DDSFile* tempFile = new DDSFile();
-         FileStream* ddsFs;
-         if ((ddsFs = FileStream::createAndOpen(mImageFile, Torque::FS::File::Read)) == NULL)
-         {
-            Con::errorf("ImageAsset::setImageFile Failed to open ddsfile: %s", mImageFile);
-         }
-
-         if (!tempFile->readHeader(*ddsFs))
-         {
-            Con::errorf("ImageAsset::setImageFile Failed to read header of ddsfile: %s", mImageFile);
-         }
-         else
-         {
-            mImageWidth = tempFile->mWidth;
-            mImageHeight = tempFile->mHeight;
-         }
-
-         ddsFs->close();
-         delete tempFile;
-      }
-      else
-      {
-         if (!stbi_info(mImageFile, &mImageWidth, &mImageHeight, &mImageChannels))
-         {
-            StringTableEntry stbErr = stbi_failure_reason();
-            if (stbErr == StringTable->EmptyString())
-               stbErr = "ImageAsset::Unkown Error!";
-
-            Con::errorf("ImageAsset::setImageFile STB Get file info failed: %s", stbErr);
-         }
-      }
-
-      // we only support 2d textures..... for no ;)
-      mImageDepth = 1;
-   }
 
    refreshAsset();
 }
@@ -675,6 +646,49 @@ void ImageAsset::onTamlCustomRead(const TamlCustomNodes& customNodes)
    }
 }
 
+void ImageAsset::populateImage(void)
+{
+   if (Torque::FS::IsFile(mImageFile))
+   {
+      if (dStrEndsWith(mImageFile, ".dds"))
+      {
+         DDSFile* tempFile = new DDSFile();
+         FileStream* ddsFs;
+         if ((ddsFs = FileStream::createAndOpen(mImageFile, Torque::FS::File::Read)) == NULL)
+         {
+            Con::errorf("ImageAsset::setImageFile Failed to open ddsfile: %s", mImageFile);
+         }
+
+         if (!tempFile->readHeader(*ddsFs))
+         {
+            Con::errorf("ImageAsset::setImageFile Failed to read header of ddsfile: %s", mImageFile);
+         }
+         else
+         {
+            mImageWidth = tempFile->mWidth;
+            mImageHeight = tempFile->mHeight;
+         }
+
+         ddsFs->close();
+         delete tempFile;
+      }
+      else
+      {
+         if (!stbi_info(mImageFile, &mImageWidth, &mImageHeight, &mImageChannels))
+         {
+            StringTableEntry stbErr = stbi_failure_reason();
+            if (stbErr == StringTable->EmptyString())
+               stbErr = "ImageAsset::Unkown Error!";
+
+            Con::errorf("ImageAsset::setImageFile STB Get file info failed: %s", stbErr);
+         }
+      }
+
+      // we only support 2d textures..... for now ;)
+      mImageDepth = 1; 
+   }
+}
+
 const char* ImageAsset::getImageInfo()
 {
    if (isAssetValid())
@@ -794,6 +808,8 @@ GuiControl* GuiInspectorTypeImageAssetPtr::constructEditControl()
    if (Sim::findObject("ToolsGuiTextEditProfile", toolEditProfile))
       editTextCtrl->setControlProfile(toolEditProfile);
 
+   editTextCtrl->setPlaceholderText("(None)");
+
    GuiControlProfile* toolDefaultProfile = nullptr;
    Sim::findObject("ToolsGuiDefaultProfile", toolDefaultProfile);
 
@@ -822,21 +838,25 @@ GuiControl* GuiInspectorTypeImageAssetPtr::constructEditControl()
 
    //
    // Create "Open in Editor" button
-   /*mEditButton = new GuiBitmapButtonCtrl();
+   mEditButton = new GuiBitmapButtonCtrl();
 
-   dSprintf(szBuffer, sizeof(szBuffer), "AssetBrowser.editAsset(%d.getText());", retCtrl->getId());
+   if (mInspector->getInspectObject() != nullptr)
+      dSprintf(szBuffer, sizeof(szBuffer), "%d.apply(\"\");", getId());
+   else
+      dSprintf(szBuffer, sizeof(szBuffer), "%s = \"\";", mVariableName);
+
    mEditButton->setField("Command", szBuffer);
 
-   mEditButton->setText("Edit");
-   mEditButton->setSizing(horizResizeLeft, vertResizeAspectTop);
+   mEditButton->setBitmap(StringTable->insert("ToolsModule:delete_n_image"));
+   mEditButton->setSizing(horizResizeRight, vertResizeAspectBottom);
 
    mEditButton->setDataField(StringTable->insert("Profile"), NULL, "ToolsGuiButtonProfile");
    mEditButton->setDataField(StringTable->insert("tooltipprofile"), NULL, "GuiToolTipProfile");
    mEditButton->setDataField(StringTable->insert("hovertime"), NULL, "1000");
-   mEditButton->setDataField(StringTable->insert("tooltip"), NULL, "Open this asset in the Image Editor");
+   mEditButton->setDataField(StringTable->insert("tooltip"), NULL, "Clear this ImageAsset");
 
    mEditButton->registerObject();
-   addObject(mEditButton);*/
+   addObject(mEditButton);
 
    //
    mUseHeightOverride = true;
@@ -861,9 +881,9 @@ bool GuiInspectorTypeImageAssetPtr::updateRects()
    mPreviewImage->resize(previewRect.point, previewRect.extent);
 
    S32 editPos = previewRect.point.x + previewRect.extent.x + 10;
-   mEdit->resize(Point2I(editPos, rowSize * 1.5), Point2I(fieldExtent.x - editPos - 5, rowSize));
+   mEdit->resize(Point2I(editPos, rowSize * 1.5), Point2I(fieldExtent.x - editPos - 5 - rowSize, rowSize));
 
-   //mEditButton->resize(Point2I(fieldExtent.x - 105, previewRect.point.y + previewRect.extent.y - rowSize), Point2I(100, rowSize));
+   mEditButton->resize(Point2I(mEdit->getPosition().x + mEdit->getExtent().x, mEdit->getPosition().y), Point2I(rowSize, rowSize));
 
    mBrowseButton->setHidden(true);
 
@@ -961,7 +981,7 @@ void GuiInspectorTypeImageAssetPtr::updatePreviewImage()
    //if what we're working with isn't even a valid asset, don't present like we found a good one
    if (!AssetDatabase.isDeclaredAsset(previewImage))
    {
-      mPreviewImage->_setBitmap(StringTable->EmptyString());
+      mPreviewImage->_setBitmap(StringTable->insert("ToolsModule:unknownImage_image"));
       return;
    }
 
@@ -989,7 +1009,7 @@ void GuiInspectorTypeImageAssetPtr::setPreviewImage(StringTableEntry assetId)
    //if what we're working with isn't even a valid asset, don't present like we found a good one
    if (!AssetDatabase.isDeclaredAsset(assetId))
    {
-      mPreviewImage->_setBitmap(StringTable->EmptyString());
+      mPreviewImage->_setBitmap(StringTable->insert("ToolsModule:unknownImage_image"));
       return;
    }
 
@@ -1010,5 +1030,21 @@ void GuiInspectorTypeImageAssetPtr::setPreviewImage(StringTableEntry assetId)
 
    if (mPreviewImage->getBitmapAsset().isNull())
       mPreviewImage->_setBitmap(StringTable->insert("ToolsModule:genericAssetIcon_image"));
+}
+
+void GuiInspectorTypeImageAssetPtr::setCaption(StringTableEntry caption)
+{
+   mCaption = caption;
+   mLabel->setText(mCaption);
+}
+
+DefineEngineMethod(GuiInspectorTypeImageAssetPtr, setCaption, void, (String newCaption), , "() - Sets the caption of the field.")
+{
+   object->setCaption(StringTable->insert(newCaption.c_str()));
+}
+
+DefineEngineMethod(GuiInspectorTypeImageAssetPtr, setIsDeleteBtnVisible, void, (bool isVisible), (false), "() - Sets if the delete/clear button is visible for the field")
+{
+   object->setIsDeleteBtnVisible(isVisible);
 }
 #endif
